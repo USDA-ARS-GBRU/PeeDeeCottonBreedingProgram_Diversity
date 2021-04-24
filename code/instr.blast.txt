@@ -1,0 +1,120 @@
+# add blast folder to PATH
+export PATH=$PATH:/home/grant/Documents/ref/ncbi-blast-2.10.1+-x64-linux/ncbi-blast-2.10.1+/bin
+
+# first build database from reference genome
+makeblastdb -in Ghirsutum_527_v2.0.fa -dbtype nucl -input_type fasta -title "Ghir 2.1" -parse_seqids -out ghirsutum_527_v2
+
+	Building a new DB, current time: 06/23/2020 10:30:25
+	New DB name:   /home/grant/Documents/ref/ghirsutum_527_v2
+	New DB title:  Ghir 2.1
+	Sequence type: Nucleotide
+	Keep MBits: T
+	Maximum file size: 1000000000B
+	Adding sequences from FASTA; added 1025 sequences in 26.6695 seconds.
+
+# okay, next lets get the masked sequence from the phytozome download
+convert2blastmask -in Ghirsutum_527_v2.0.softmasked.fa \
+  -parse_seqids \
+  -masking_algorithm repeat \
+  -masking_options "repeatmasker, default" \
+  -outfmt maskinfo_asn1_bin \
+  -out Ghirsutum_527_v2.0.asnb 
+
+# lets add the mask information to the database
+makeblastdb -in ghirsutum_527_v2 \
+  -dbtype nucl \
+  -input_type blastdb \
+  -mask_data ../Ghirsutum/v2.1/assembly/Ghirsutum_527_v2.0.asnb \
+  -title "Ghir 2.1 masked" \
+  -parse_seqids \
+  -out ghirsutum_527_v2_msk 
+
+# build a mblast datbased
+makembindex -input ghirsutum_527_v2_msk \
+  -iformat blastdb \
+  -db_mask 40 \
+  -ws_hint 50 \
+  -old_style_index false
+
+# query a sequence
+
+blastn -db ghirsutum_527_v2 \
+	-query test.fasta \
+	-out test \
+	-outfmt 6 \
+	-num_threads 4 \
+	-num_alignments 1
+
+# Fields: query acc.ver, subject acc.ver, % identity, alignment length, mismatches, gap opens, q. start, q. end, s. start, s. end, evalue, bit score
+
+blastn -db ghirsutum_527_v2_msk \
+  -query 63k_50nt_probes_2alleles.fasta \
+  -task megablast  \
+  -use_index true \
+  -out 2alleles.out \
+  -outfmt 6 \
+  -num_threads 4 \
+  -num_alignments 10 \
+  -perc_identity 98 \
+  -ungapped \
+  -word_size 50
+
+# what if we try matching the whole sequence?
+
+blastn -db ghirsutum_527_v2_msk \
+  -query 63k_50nt_probes_2alleles.fasta \
+  -task megablast  \
+  -use_index true \
+  -out 2alleles_all.out \
+  -outfmt 6 \
+  -num_threads 4 \
+  -num_alignments 10 \
+  -perc_identity 98 \
+  -ungapped \
+  -word_size 51
+
+# get a more lenient set of matches
+
+blastn -db ghirsutum_527_v2_msk \
+  -query 63k_50nt_probes_2alleles.fasta \
+  -out 2alleles_all_more.out \
+  -outfmt 6 \
+  -num_threads 4 \
+  -num_alignments 10 \
+  -perc_identity 98
+
+# fine tune the scoring
+blastn -db ghirsutum_527_v2_msk \
+  -query test2.fasta \
+  -out test2.out \
+  -num_threads 4 \
+  -num_alignments 10 \
+  -dust no \
+  -perc_identity 96
+
+# try again, with lenient matches and dust masking off (for repetitive probes)
+blastn -db ghirsutum_527_v2_msk \
+  -query 63k_50nt_probes_2alleles.fasta \
+  -out 2alleles_all_more.out \
+  -outfmt 6 \
+  -num_threads 4 \
+  -num_alignments 10 \
+  -perc_identity 96 \
+  -dust no \
+  -word_size 9
+
+
+# try to find a match for this sequence with no matches
+
+blastn -db ghirsutum_527_v2_msk \
+  -query test3.fasta \
+  -out test3.out \
+  -outfmt 6 \
+  -num_threads 4 \
+  -num_alignments 10 \
+  -perc_identity 96 \
+  -dust no \
+  -word_size 9
+
+# restrict to length of 45 or longer
+awk -F"\t" '$4>44' 2alleles_all_more.out > 2alleles_all_more_filt.out

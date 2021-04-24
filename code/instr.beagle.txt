@@ -1,0 +1,61 @@
+java -Xmx4000m -jar *.jar \
+  gt=./sweeps/all_chr1.vcf \
+  out=./output/chr1
+  
+
+../../rustgi_new/plink -bfile plink --autosome-num 26 --allow-no-sex --chr 1 --out all_chr1 --recode vcf-iid --allow-extra-chr
+
+../../rustgi_new/plink -bfile plink --autosome-num 26 --allow-no-sex --chr 1 --out phen_chr1 --recode vcf-iid --allow-extra-chr
+
+ java -Xmx4000m -jar *.jar   gt=./sweeps/plink.vcf   out=./output/plink
+
+# create the input file first
+../../rustgi_new/plink --bfile plink --autosome-num 26 --recode vcf-iid
+
+# test it for one chromosome
+for i in {1..1}
+do
+  java -Xmx8000m -jar *.jar   gt=./input/plink.vcf   out=./output/plink.chr"$i" chrom="$i" gp=true ap=true
+done
+
+
+# actually run for all 26 chromosomes
+for i in {1..26}; 
+do 
+  java -Xmx8000m -jar beagle.*.jar gt=./input/plink.vcf out=./output/plink.chr"$i" chrom="$i" window=200 nthreads=3 ne=10000 burnin=10 iterations=50 phase-states=500 imp-step=0.05 imp-nsteps=10; 
+done
+
+gunzip *.gz
+
+# convert to a plink format
+for i in {1..26}
+do
+  ../../rustgi_new/plink --vcf plink.chr"$i".vcf --make-bed --out chr$i --allow-no-sex --autosome-num 26 --const-fid
+done
+
+# make a list of the chromosomes to merge together
+for i in {1..26}; do echo chr"$i" >> mergelist.txt; done
+
+# merge into a single plink file
+../../rustgi_new/plink --merge-list mergelist.txt --autosome-num 26 --allow-no-sex --make-bed --out imputed_rustgi --keep keeplines.txt
+
+# find duplicated individuals
+# ../../rustgi_new/plink --bfile imputed --autosome-num 26 --allow-no-sex --list-duplicate-vars ids-only suppress-first --out imputed
+
+# get duplicated list from python script examinedups.py (SNPs in same position)
+../../rustgi_new/plink --bfile imputed --make-bed --out pheno_lst --autosome-num 26 --allow-no-sex --exclude ~/Documents/py/dups.txt --keep keeplines.txt
+
+# filter by minor allele frequency
+../../rustgi_new/plink --bfile pheno_lst --make-bed --autosome-num 26 --allow-no-sex --maf 0.025
+
+## NOW repeat for RUSTGI dataset
+
+
+# merge with 388 individuals first
+# export each chr as a
+
+# do some testing... whats the concordance between the "duplicate" SNPs we found?
+# bootstrapping... should we try and impute on known genotype and see what the results are?  maybe for validation later on....
+
+
+
